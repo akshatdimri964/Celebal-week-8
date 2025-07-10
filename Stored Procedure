@@ -1,0 +1,64 @@
+CREATE TABLE TimeDimension (
+    DateKey DATE PRIMARY KEY,
+    Day INT,
+    Month INT,
+    Quarter INT,
+    Year INT,
+    DayName VARCHAR(10),
+    DayOfWeek INT,
+    DayOfYear INT,
+    DaySuffix VARCHAR(5),
+    WeekOfMonth INT,
+    MonthName VARCHAR(10),
+    IsWeekend BOOLEAN
+);
+DELIMITER //
+
+CREATE PROCEDURE PopulateTimeDimension(IN input_date DATE)
+BEGIN
+    DECLARE start_date DATE;
+    DECLARE end_date DATE;
+
+    SET start_date = DATE_FORMAT(input_date, '%Y-01-01');
+    SET end_date = DATE_FORMAT(input_date, '%Y-12-31');
+
+    INSERT INTO TimeDimension (DateKey, Day, Month, Quarter, Year, DayName, DayOfWeek, DayOfYear, DaySuffix, WeekOfMonth, MonthName, IsWeekend)
+    SELECT 
+        d.generated_date AS DateKey,
+        DAY(d.generated_date) AS Day,
+        MONTH(d.generated_date) AS Month,
+        QUARTER(d.generated_date) AS Quarter,
+        YEAR(d.generated_date) AS Year,
+        DAYNAME(d.generated_date) AS DayName,
+        WEEKDAY(d.generated_date) + 1 AS DayOfWeek,
+        DAYOFYEAR(d.generated_date) AS DayOfYear,
+        CASE
+            WHEN DAY(d.generated_date) IN (11, 12, 13) THEN CONCAT(DAY(d.generated_date), 'th')
+            WHEN RIGHT(DAY(d.generated_date), 1) = '1' THEN CONCAT(DAY(d.generated_date), 'st')
+            WHEN RIGHT(DAY(d.generated_date), 1) = '2' THEN CONCAT(DAY(d.generated_date), 'nd')
+            WHEN RIGHT(DAY(d.generated_date), 1) = '3' THEN CONCAT(DAY(d.generated_date), 'rd')
+            ELSE CONCAT(DAY(d.generated_date), 'th')
+        END AS DaySuffix,
+        FLOOR((DAY(d.generated_date) - 1) / 7) + 1 AS WeekOfMonth,
+        MONTHNAME(d.generated_date) AS MonthName,
+        CASE 
+            WHEN WEEKDAY(d.generated_date) IN (5, 6) THEN TRUE
+            ELSE FALSE
+        END AS IsWeekend
+    FROM (
+        SELECT ADDDATE(start_date, INTERVAL seq DAY) AS generated_date
+        FROM (
+            SELECT a.N + b.N * 10 + c.N * 100 AS seq
+            FROM 
+                (SELECT 0 AS N UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4
+                 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) a,
+                (SELECT 0 AS N UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4
+                 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) b,
+                (SELECT 0 AS N UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3) c
+        ) AS numbers
+        WHERE ADDDATE(start_date, INTERVAL seq DAY) <= end_date
+    ) d;
+
+END //
+
+DELIMITER ;
